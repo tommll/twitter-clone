@@ -2,9 +2,12 @@ import json
 import os
 from typing import Optional, Any
 import redis.asyncio as redis
+from redis.backoff import ExponentialBackoff
+from redis.retry import Retry
 
+retry = Retry(ExponentialBackoff(), 3)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-redis_client = redis.from_url(REDIS_URL)
+redis_client = redis.from_url(REDIS_URL, retry=retry)
 
 def set_cache(key: str, value: Any, expire: int = 3600):
     """Set a key-value pair in Redis with expiration in seconds"""

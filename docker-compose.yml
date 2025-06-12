@@ -1,0 +1,70 @@
+version: '3.8'
+
+# Define networks
+networks:
+  twitter-network:
+    driver: bridge
+
+services:
+  redis:
+    image: redis:7
+    networks:
+      - twitter-network
+    ports:
+      - "6379:6379"
+
+  sqlite:
+    image: keinos/sqlite3:latest
+    networks:
+      - twitter-network
+    volumes:
+      - ./data:/data
+
+  read-service:
+    build:
+      context: .
+      dockerfile: services/read/Dockerfile
+    networks:
+      - twitter-network
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+      - sqlite
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=/data/twitter.db
+    volumes:
+      - ./data:/data
+
+  write-service:
+    build:
+      context: .
+      dockerfile: services/write/Dockerfile
+    networks:
+      - twitter-network
+    ports:
+      - "8001:8001"
+    depends_on:
+      - redis
+      - sqlite
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=/data/twitter.db
+    volumes:
+      - ./data:/data
+
+  db-updater:
+    build:
+      context: .
+      dockerfile: services/db-updater/Dockerfile
+    networks:
+      - twitter-network
+    depends_on:
+      - redis
+      - sqlite
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=/data/twitter.db
+    volumes:
+      - ./data:/data 

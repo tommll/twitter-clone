@@ -1,5 +1,6 @@
 import json
 import time
+import asyncio
 from common.cache import redis_client
 from common.database import get_db, init_db
 
@@ -45,7 +46,7 @@ def process_user_message(message):
         """, (data["username"], data["email"]))
         conn.commit()
 
-def main():
+async def main():
     print("Starting DB updater service...")
     init_db()  # Initialize database tables
 
@@ -55,19 +56,19 @@ def main():
 
     # Create consumer group for each stream
     try:
-        redis_client.xgroup_create(TWEET_STREAM, "db-updater-group", "0", mkstream=True)
+        await redis_client.xgroup_create(TWEET_STREAM, "db-updater-group", "0", mkstream=True)
     except:
         print("Tweet stream group already exists")
 
     try:
-        redis_client.xgroup_create(USER_STREAM, "db-updater-group", "0", mkstream=True)
+        await redis_client.xgroup_create(USER_STREAM, "db-updater-group", "0", mkstream=True)
     except:
         print("User stream group already exists")
 
     while True:
         try:
             # Read from both streams
-            streams = redis_client.xreadgroup(
+            streams = await redis_client.xreadgroup(
                 "db-updater-group",
                 "db-updater-consumer",
                 {
@@ -78,19 +79,18 @@ def main():
                 block=1000  # Block for 1 second if no messages
             )
 
-            if streams:
-                for stream_name, messages in streams:
-                    for message_id, message_data in messages:
-                        if stream_name == TWEET_STREAM.encode():
-                            process_tweet_message(message_data[b"message"].decode())
-                            redis_client.xack(TWEET_STREAM, "db-updater-group", message_id)
-                        elif stream_name == USER_STREAM.encode():
-                            process_user_message(message_data[b"message"].decode())
-                            redis_client.xack(USER_STREAM, "db-updater-group", message_id)
+            for stream_name, messages in streams:
+                for message_id, message_data in messages:
+                    if stream_name == TWEET_STREAM.encode():
+                        process_tweet_message(message_data[b"message"].decode())
+                        redis_client.xack(TWEET_STREAM, "db-updater-group", message_id)
+                    elif stream_name == USER_STREAM.encode():
+                        process_user_message(message_data[b"message"].decode())
+                        redis_client.xack(USER_STREAM, "db-updater-group", message_id)
 
         except Exception as e:
             print(f"Error processing messages: {e}")
             time.sleep(1)  # Wait before retrying
 
 if __name__ == "__main__":
-    main() 
+    asyncio.run(main()) 
